@@ -12,11 +12,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sudo snap install typst
-      - run: typst compile prova.typ prova.pdf
+      
+      - name: Install typst
+        run: sudo snap install typst
+        
+      - name: Compile all .typ files to PDF
+        run: |
+          find . -name "*.typ" -type f | while read typ_file; do
+            pdf_file="${typ_file%.typ}.pdf"
+            echo "Compiling $typ_file to $pdf_file"
+            typst compile "$typ_file" "$pdf_file"
+          done
+          
+      - name: List generated PDFs
+        run: find . -name "*.pdf" -type f | echo "Generated PDFs:" && find . -name "*.pdf" -type f
+      
       - uses: actions/configure-pages@v4
+      
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .
+          
       - uses: actions/deploy-pages@v4
         id: deployment
