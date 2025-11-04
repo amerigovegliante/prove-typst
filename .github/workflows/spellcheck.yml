@@ -41,4 +41,4 @@ jobs:
 
       - name: Run spellcheck
         run: |
-          python3 spellcheck_typst.py /tmp/dict.txt --all
+          python3 spellcheck.py /tmp/dict.txt --all
