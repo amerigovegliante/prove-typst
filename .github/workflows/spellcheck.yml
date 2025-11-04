@@ -16,80 +16,29 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Install aspell and dictionaries
         run: |
-          pip install pyspelling
           sudo apt-get update
           sudo apt-get install -y aspell aspell-en aspell-it
 
-      - name: Create pyspelling config
+      - name: Create combined dictionary
         run: |
-          cat > .pyspelling.yml << 'EOF'
-          matrix:
-          - name: typst
-            sources:
-            - '**/*.typ'
-            aspell:
-              lang: en
-              d: en_US
-            dictionary:
-              wordlists:
-              - .wordlist.txt
-              encoding: utf-8
-            pipeline:
-            - pyspelling.filters.text:
-            - pyspelling.filters.context:
-                context_visible_first: true
-                delimiters:
-                # Remove Typst function calls
-                - open: '#[a-zA-Z_]'
-                  close: '(?=\s|\(|$)'
-                # Remove content in brackets and braces
-                - open: '[\[{]'
-                  close: '[\]}]'
-          EOF
-
-      - name: Create combined wordlist
-        run: |
-          python3 << 'PYTHON_SCRIPT'
-          import subprocess
-          import os
+          # Export Italian and English dictionaries
+          aspell -d it dump master | aspell -l it expand | tr ' ' '\n' > it.txt
+          aspell -d en dump master | aspell -l en expand | tr ' ' '\n' > en.txt
           
-          # Get English words
-          en_result = subprocess.run(
-              ['aspell', '-d', 'en', 'dump', 'master'],
-              capture_output=True, text=True
-          )
-          en_words = set(en_result.stdout.strip().split('\n'))
+          # Combine and sort
+          cat /tmp/it.txt /tmp/en.txt | sort -u > /tmp/dict.txt
           
-          # Get Italian words
-          it_result = subprocess.run(
-              ['aspell', '-d', 'it', 'dump', 'master'],
-              capture_output=True, text=True
-          )
-          it_words = set(it_result.stdout.strip().split('\n'))
+          # Add custom words if they exist
+          if [ -f "custom.txt" ]; then
+            echo "Found custom dictionary, adding words..."
+            tail -n +2 custom.txt >> /tmp/dict.txt
+            sort -u /tmp/dict.txt -o /tmp/dict.txt
+          fi
           
-          # Combine words
-          all_words = en_words.union(it_words)
-          
-          # Filter out empty strings and invalid words
-          all_words = {w for w in all_words if w and not w.startswith("'") and not w.endswith("'")}
-          
-          # Add custom words if file exists
-          if os.path.exists('.aspell.custom.pws'):
-              with open('.aspell.custom.pws', 'r', encoding='utf-8') as f:
-                  lines = f.readlines()[1:]  # Skip header
-                  custom_words = {line.strip() for line in lines if line.strip()}
-                  all_words = all_words.union(custom_words)
-          
-          # Write wordlist
-          with open('.wordlist.txt', 'w', encoding='utf-8') as f:
-              for word in sorted(all_words):
-                  f.write(word + '\n')
-          
-          print(f"Created wordlist with {len(all_words)} words")
-          PYTHON_SCRIPT
+          echo "Dictionary created with $(wc -l < /tmp/combined_dict.txt) words"
 
       - name: Run spellcheck
         run: |
-          pyspelling -c .pyspelling.yml
+          python3 spellcheck_typst.py /tmp/dict.txt --all
