@@ -2,9 +2,9 @@ name: Spellcheck Typst Files
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
 
 jobs:
   spellcheck:
@@ -20,18 +20,29 @@ jobs:
 
       - name: Create combined dictionary
         run: |
+          # Export English words
           aspell -d en dump master | aspell -l en expand > /tmp/en_words.txt
+          # Export Italian words
           aspell -d it dump master | aspell -l it expand > /tmp/it_words.txt
-          cat /tmp/en_words.txt /tmp/it_words.txt | sort -u > /tmp/combined_dict.txt
-
+          # Combine dictionaries
+          cat /tmp/en_words.txt /tmp/it_words.txt | sort -u > /tmp/word_list.txt
+          
+          # Add custom words if custom dictionary exists
           if [ -f ".aspell.custom.pws" ]; then
             echo "Found custom dictionary, adding words..."
-            tail -n +2 .aspell.custom.pws >> /tmp/combined_dict.txt
-            sort -u /tmp/combined_dict.txt -o /tmp/combined_dict.txt
+            # Skip the first line (header) and add custom words
+            tail -n +2 .aspell.custom.pws >> /tmp/word_list.txt
+            sort -u /tmp/word_list.txt -o /tmp/word_list.txt
           fi
+          
+          # Create proper aspell personal dictionary format
+          WORD_COUNT=$(wc -l < /tmp/word_list.txt)
+          echo "personal_ws-1.1 en $WORD_COUNT utf-8" > /tmp/combined_dict.txt
+          cat /tmp/word_list.txt >> /tmp/combined_dict.txt
 
       - name: Spellcheck Typst files
         run: |
+          # Find all .typ files
           TYPST_FILES=$(find . -name "*.typ")
           
           if [ -z "$TYPST_FILES" ]; then
@@ -44,6 +55,8 @@ jobs:
           for file in $TYPST_FILES; do
             echo "Checking: $file"
             
+            # Extract text content (remove Typst markup for better checking)
+            # This basic extraction removes common Typst syntax
             cat "$file" | \
               sed 's/#[a-zA-Z_][a-zA-Z0-9_]*//g' | \
               sed 's/\[//g' | sed 's/\]//g' | \
@@ -52,19 +65,19 @@ jobs:
               sort -u > /tmp/misspelled_${file//\//_}.txt
             
             if [ -s /tmp/misspelled_${file//\//_}.txt ]; then
-              echo "Potential misspellings in $file:"
+              echo "❌ Potential misspellings in $file:"
               cat /tmp/misspelled_${file//\//_}.txt | sed 's/^/  - /'
               ERRORS_FOUND=1
             else
-              echo "No misspellings found in $file"
+              echo "✓ No misspellings found in $file"
             fi
             echo ""
           done
           
           if [ $ERRORS_FOUND -eq 1 ]; then
-            echo "Spellcheck found potential issues. Please review the words above."
+            echo "⚠️  Spellcheck found potential issues. Please review the words above."
             echo "Note: These may include technical terms, proper nouns, or Typst syntax."
             exit 1
           else
-            echo "All files passed spellcheck!"
+            echo "✅ All files passed spellcheck!"
           fi
