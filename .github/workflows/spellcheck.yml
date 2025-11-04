@@ -77,7 +77,6 @@ jobs:
           else
             echo "✅ All files passed spellcheck!"
           fi
- | \
             grep -v "'$" | \
             grep -v "^'" | \
             sort -u > /tmp/word_list.txt
