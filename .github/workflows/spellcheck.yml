@@ -28,17 +28,17 @@ jobs:
           aspell -d en dump master | aspell -l en expand | tr ' ' '\n' > en.txt
           
           # Combine and sort
-          cat /tmp/it.txt /tmp/en.txt | sort -u > /tmp/dict.txt
+          cat it.txt en.txt | sort -u > dict.txt
           
           # Add custom words if they exist
           if [ -f "custom.txt" ]; then
             echo "Found custom dictionary, adding words..."
-            tail -n +2 custom.txt >> /tmp/dict.txt
-            sort -u /tmp/dict.txt -o /tmp/dict.txt
+            tail -n +2 custom.txt >> dict.txt
+            sort -u dict.txt -o dict.txt
           fi
           
-          echo "Dictionary created with $(wc -l < /tmp/combined_dict.txt) words"
+          echo "Dictionary created with $(wc -l < dict.txt) words"
 
       - name: Run spellcheck
         run: |
-          python3 spellcheck.py /tmp/dict.txt --all
+          python3 spellcheck.py dict.txt --all
