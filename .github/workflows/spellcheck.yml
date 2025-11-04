@@ -20,12 +20,55 @@ jobs:
 
       - name: Create combined dictionary
         run: |
-          # Export English words
-          aspell -d en dump master | aspell -l en expand > /tmp/en_words.txt
+          # Export English words (expand creates space-separated variants)
+          aspell -d en dump master | aspell -l en expand | tr ' ' '\n' > /tmp/en_words.txt
           # Export Italian words
-          aspell -d it dump master | aspell -l it expand > /tmp/it_words.txt
-          # Combine dictionaries
-          cat /tmp/en_words.txt /tmp/it_words.txt | sort -u > /tmp/word_list.txt
+          aspell -d it dump master | aspell -l it expand | tr ' ' '\n' > /tmp/it_words.txt
+          # Combine dictionaries and remove empty lines
+          cat /tmp/en_words.txt /tmp/it_words.txt | grep -v '^
+
+      - name: Spellcheck Typst files
+        run: |
+          # Find all .typ files
+          TYPST_FILES=$(find . -name "*.typ")
+          
+          if [ -z "$TYPST_FILES" ]; then
+            echo "No .typ files found"
+            exit 0
+          fi
+          
+          ERRORS_FOUND=0
+          
+          for file in $TYPST_FILES; do
+            echo "Checking: $file"
+            
+            # Extract text content (remove Typst markup for better checking)
+            # This basic extraction removes common Typst syntax
+            cat "$file" | \
+              sed 's/#[a-zA-Z_][a-zA-Z0-9_]*//g' | \
+              sed 's/\[//g' | sed 's/\]//g' | \
+              sed 's/{//g' | sed 's/}//g' | \
+              aspell list --personal=/tmp/combined_dict.txt --encoding=utf-8 | \
+              sort -u > /tmp/misspelled_${file//\//_}.txt
+            
+            if [ -s /tmp/misspelled_${file//\//_}.txt ]; then
+              echo "❌ Potential misspellings in $file:"
+              cat /tmp/misspelled_${file//\//_}.txt | sed 's/^/  - /'
+              ERRORS_FOUND=1
+            else
+              echo "✓ No misspellings found in $file"
+            fi
+            echo ""
+          done
+          
+          if [ $ERRORS_FOUND -eq 1 ]; then
+            echo "⚠️  Spellcheck found potential issues. Please review the words above."
+            echo "Note: These may include technical terms, proper nouns, or Typst syntax."
+            exit 1
+          else
+            echo "✅ All files passed spellcheck!"
+          fi
+ | sort -u > /tmp/word_list.txt
           
           # Add custom words if custom dictionary exists
           if [ -f ".aspell.custom.pws" ]; then
